@@ -2,6 +2,7 @@
 
 import Adafruit_DHT
 import vcgencmd
+import signal
 import time
 import psutil
 from datetime import datetime
@@ -11,18 +12,27 @@ import os
 from glob import glob
 
 LOGDIR = '../usb/logs/'
-
 INTERVAL = 60 #[s]
 DHT_SENSOR = Adafruit_DHT.DHT22
 DHT_PIN = 4
-vcmd = vcgencmd.Vcgencmd()
 
 col = ['date', 'time', 'temp[*C]', 'humid[%}', 'CPU[*C]', 'CPU[v]', 'CPU[MHz]', 'CPU[%]', 'memory[%]', 'rootfs[%]', 'usb[%]']
 series = [pd.Series([np.nan for x in col], index = col) \
           for i in range(round(24 * 60 * 60 / INTERVAL))]
 currentIndex = 0
+vcmd = vcgencmd.Vcgencmd()
 
-while True:
+
+def watch(signum, frame):
+
+    global LOGDIR
+    global INTERVAL
+    global DHT_SENSOR
+    global DHT_PIN
+    global col
+    global series
+    global currentIndex
+    global vcmd
 
     day, tm = datetime.now().strftime('%Y%m%d-%H%M%S').split('-')
 
@@ -34,7 +44,7 @@ while True:
     if 95 < series[currentIndex]['usb[%]']:
         fname = min(glob(LOGDIR + '20*.csv'))
         os.remove(fname)
-        print(fname, 'has deleted due to free space shortage.')
+        print(fname, 'deleted due to free space shortage.')
 
     df = pd.DataFrame([y for y in \
                        [x for x in series if not pd.isnull(x['date'])] \
@@ -42,8 +52,16 @@ while True:
            .sort_values(by = 'time', ascending = False)
     
     df.to_csv(LOGDIR + day + '.csv', encoding = 'utf-8', index = False)
-    print(day + '.csv has dumped with', len(df), 'records (' + tm[:2] + ':' + tm[2:4] + ':' + tm[4:] + ')')
+    print(day + '.csv dumped with', len(df), 'records (' + tm[:2] + ':' + tm[2:4] + ':' + tm[4:] + ')')
     print(series[currentIndex])
 
-    time.sleep(INTERVAL)
     currentIndex = (currentIndex + 1) % len(series)
+
+
+if __name__ == '__main__':
+    
+    signal.signal(signal.SIGALRM, watch)
+    signal.setitimer(signal.ITIMER_REAL, INTERVAL, INTERVAL)
+    
+    while True:
+        time.sleep(86400)
