@@ -68,7 +68,7 @@ def watch(signum, frame):
     day, tm = currentDateTime.strftime('%Y%m%d-%H%M%S').split('-')
 
     series[currentIndex][['date', 'time']] = [day, tm]
-    series[currentIndex][['humid[%}', 'temp[*C]']] = [round(x, 2) for x in Adafruit_DHT.read_retry(DHT_SENSOR, DHT_PIN)]
+    series[currentIndex][['humid[%}', 'temp[*C]']] = [round(x, 2) if x else 0 for x in Adafruit_DHT.read_retry(DHT_SENSOR, DHT_PIN)]
     series[currentIndex][['CPU[*C]', 'CPU[v]', 'CPU[MHz]']] = [vcmd.measure_temp(), vcmd.measure_volts('core'), round(vcmd.measure_clock('arm') / 1000000)]
     series[currentIndex][['CPU[%]', 'memory[%]', 'rootfs[%]', 'usb[%]']] = [psutil.cpu_percent(interval = 1), psutil.virtual_memory().percent, psutil.disk_usage('/').percent, psutil.disk_usage('/home/pi/usb').percent]
     series[currentIndex]['activity'], oldestJPG = countMotion(previousDateTime, currentDateTime)
