@@ -205,7 +205,7 @@ def watch(signum, frame):
         n = series[currentIndex]['activity']
         for li in range(len(lastMoveIndex)):
             lastMoveIndex[li] = (lastMoveIndex[li] + 1) % len(lastMoveIndex)
-        lastMoves[lastMoveIndex[-1]] = (series[currentIndex]['time'][2:4], str(n))
+        lastMoves[lastMoveIndex[-1]] = (msg, str(n))
         
         if n < 5:            
             msg += 'たろいもさんが起きました'
@@ -268,7 +268,7 @@ def watch(signum, frame):
             if not lastMoveIndex[li] in lastMoves:
                 break
             lm = lastMoves[lastMoveIndex[li]]
-            msg += lm[0][2:] + ':' + lm[0][2:] + ' ' + lm[1] + 'act, '
+            msg += lm[0] + lm[1] + 'act, '
         
         activity = 0        
         client = WebClient(token = os.environ["SLACK_API_TOKEN"])
