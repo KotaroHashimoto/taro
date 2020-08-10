@@ -17,7 +17,8 @@ from slack import WebClient
 from slack import RTMClient
 from slack.errors import SlackApiError
 import logging
-logging.basicConfig(level = logging.DEBUG)
+import urllib
+logging.basicConfig(level = logging.INFO)
 
 MEDIADIR = '../usb/media/motion/'
 LOGDIR = '../usb/logs/'
@@ -32,6 +33,9 @@ currentIndex = 0
 previousDateTime = None
 activity = 0
 vcmd = vcgencmd.Vcgencmd()
+
+lastMoves = OrderedDict()
+lastMoveIndex = [x for x in range(5)]
 
 
 def countMotion(dtFrom, dtTo):
@@ -83,7 +87,7 @@ def drawChart(df):
         
     fig = plt.figure(figsize = (16, 9))
     ax1 = fig.add_subplot(111)
-    ln1 = ax1.plot(xval, [round(float(x), 1) for x in df['temp[*C]']], 'C0',label = 'Temperature [*C]')
+    ln1 = ax1.plot(xval, [float(x) for x in df['temp[*C]']], 'C0',label = 'Temperature [*C]')
 
     ax2 = ax1.twinx()
     ln2 = ax2.plot(xval, [int(x) for x in df['activity']], 'C1', label = 'TaroImo Activity [/minute]')
@@ -96,7 +100,7 @@ def drawChart(df):
     ax1.set_ylabel('Temperature [*C]')
     ax2.set_ylabel('TaroImo Activity [/minute]')
 
-    ax1.set_title('TaroImo Activity and Temperature')
+    ax1.set_title('Temperature and TaroImo Activity')
     ax1.set_xticks(df.index)
     ax1.set_xticklabels(hm, rotation = 40) 
     plt.savefig(LOGDIR + 'Temperature.png')
@@ -104,20 +108,20 @@ def drawChart(df):
     
     fig = plt.figure(figsize = (16, 9))
     ax1 = fig.add_subplot(111)
-    ln1 = ax1.plot(xval, [round(float(x), 1) for x in df['humid[%]']], 'C0', label = 'Humidity [%]')
-
+    ln1 = ax1.plot(xval, [float(x) for x in df['temp[*C]']], 'C0',label = 'Temperature [*C]')
+    
     ax2 = ax1.twinx()
-    ln2 = ax2.plot(xval, [int(x) for x in df['activity']], 'C1',label = 'TaroImo Activity [/minute]')
+    ln2 = ax2.plot(xval, [float(x) for x in df['humid[%]']], 'C1', label = 'Humidity [%]')
 
     h1, l1 = ax1.get_legend_handles_labels()
     h2, l2 = ax2.get_legend_handles_labels()
     ax1.legend(h1 + h2, l1 + l2, loc = 'lower right')
 
     ax1.set_xlabel('Time')
-    ax1.set_ylabel('Humidity [%]')
-    ax2.set_ylabel('TaroImo Activity [/minute]')
+    ax1.set_ylabel('Temperature [*C]')
+    ax2.set_ylabel('Humidity [%]')
 
-    ax1.set_title('TaroImo Activity and Humidity')
+    ax1.set_title('Temperature and Humidity')
     ax1.set_xticks(df.index)
     ax1.set_xticklabels(hm, rotation = 40) 
     plt.savefig(LOGDIR + 'Humidity.png')
@@ -193,11 +197,16 @@ def watch(signum, frame):
         print(fname, 'deleted due to free space shortage.')
     '''
 
+    response = None
     activity += series[currentIndex]['activity']    
     if 0 < series[currentIndex]['activity']:
 
         msg = series[currentIndex]['time'][:2] + ':' + series[currentIndex]['time'][2:4] + ' '
         n = series[currentIndex]['activity']
+        for li in range(len(lastMoveIndex)):
+            lastMoveIndex[li] = (lastMoveIndex[li] + 1) % len(lastMoveIndex)
+        lastMoves[lastMoveIndex[-1]] = (series[currentIndex]['time'][2:4], str(n))
+        
         if n < 5:            
             msg += 'たろいもさんが起きました'
         elif n < 10:
@@ -209,8 +218,8 @@ def watch(signum, frame):
 
         msg += ":" + str(n) + ' activity/分, '
         msg += '温度:' + str(series[currentIndex]['temp[*C]']) + '℃, '
-        msg += '湿度:' + str(series[currentIndex]['humid[%]']) + '%, '
-        
+        msg += '湿度:' + str(series[currentIndex]['humid[%]']) + '%'
+
         client = WebClient(token = os.environ["SLACK_API_TOKEN"])        
         try:
             response = client.chat_postMessage(
@@ -224,7 +233,11 @@ def watch(signum, frame):
                         channels = 'C018J2HN0UB', 
                         file = fname,
                     ) 
-           
+
+        except urllib.error.URLError as e:
+            print(response, '\n', e)
+            sendMail(msg, str(response) + str(e))
+            pass            
         except:
             print(response)
             sendMail(msg, str(response))
@@ -248,8 +261,15 @@ def watch(signum, frame):
         msg += '湿度:' + str(series[currentIndex]['humid[%]']) + '%, '
         msg += 'CPU温度,使用率:' + str(series[currentIndex]['CPU[*C]']) + '℃,' + str(series[currentIndex]['CPU[%]']) + '%, '
         msg += 'メモリ使用率:' + str(series[currentIndex]['memory[%]']) + '%, '
-        msg += 'SD,USB使用率:' + str(series[currentIndex]['rootfs[%]']) + '%, ' + str(series[currentIndex]['usb[%]']) + '%'
+        msg += 'SD,USB使用率:' + str(series[currentIndex]['rootfs[%]']) + '%, ' + str(series[currentIndex]['usb[%]']) + '%, '
 
+        msg += '最近の動き:'
+        for li in range(len(lastMoveIndex) - 1, -1, -1):
+            if not lastMoveIndex[li] in lastMoves:
+                break
+            lm = lastMoves[lastMoveIndex[li]]
+            msg += lm[0][2:] + ':' + lm[0][2:] + ' ' + lm[1] + 'act, '
+        
         activity = 0        
         client = WebClient(token = os.environ["SLACK_API_TOKEN"])
         try:
@@ -263,6 +283,10 @@ def watch(signum, frame):
                     file = fname,
                 )
             
+        except urllib.error.URLError as e:
+            print(response, '\n', e)
+            sendMail(msg, str(response) + str(e))
+            pass            
         except:
             print(response)
             sendMail(msg, str(response))
@@ -287,6 +311,15 @@ def watch(signum, frame):
         except:
             pass
     '''
+
+    if tm.startswith('235'):
+        df = pd.DataFrame([y for y in \
+                           [x for x in series if not pd.isnull(x['date'])] \
+                           if y['date'] == day]) \
+               .sort_values(by = ['date', 'time'], ascending = False).reset_index(drop = True)
+
+        df.to_csv(LOGDIR + day + '.csv', encoding = 'utf-8', index = False)
+        print(day + '.csv dumped with', len(df), 'records (' + tm[:2] + ':' + tm[2:4] + ':' + tm[4:] + ')')    
         
     currentIndex = (currentIndex + 1) % len(series)
     previousDateTime = currentDateTime
@@ -311,7 +344,7 @@ if __name__ == '__main__':
         df.to_csv(day + '.csv', encoding = 'utf-8', index = False)
         exit(1)
         '''
-
+        
     signal.signal(signal.SIGALRM, watch)
     signal.setitimer(signal.ITIMER_REAL, INTERVAL, INTERVAL)
     
