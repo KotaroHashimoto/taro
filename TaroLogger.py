@@ -13,6 +13,11 @@ from glob import glob
 from collections import OrderedDict
 import matplotlib.pyplot as plt
 import matplotlib.cm as cm
+from slack import WebClient
+from slack import RTMClient
+from slack.errors import SlackApiError
+import logging
+logging.basicConfig(level = logging.DEBUG)
 
 MEDIADIR = '../usb/media/motion/'
 LOGDIR = '../usb/logs/'
@@ -25,19 +30,21 @@ series = [pd.Series([np.nan for x in col], index = col) \
           for i in range(round(24 * 60 * 60 / INTERVAL))]
 currentIndex = 0
 previousDateTime = None
+activity = 0
 vcmd = vcgencmd.Vcgencmd()
 
 
 def countMotion(dtFrom, dtTo):
 
     if not dtFrom:
-        return 0, None
+        return 0, None, []
 
     global MEDIADIR
     
     fname2time = OrderedDict()
     oldest = None
     num = 0
+    recentFiles = []
 
     for f in glob(MEDIADIR + '*jpg'):
         timeStamp = datetime.fromtimestamp(os.path.getmtime(f))
@@ -48,35 +55,107 @@ def countMotion(dtFrom, dtTo):
         elif timeStamp < fname2time[oldest]:
             oldest = f
 
-        if dtFrom <= timeStamp < dtTo:
+        if dtFrom <= timeStamp:
             num += 1
+            recentFiles.append(f)
 
-    return num, oldest
+    return num, oldest, recentFiles
 
 
 def drawChart(df):
 
-    hm = [int(x[:4]) for x in df['time']]
+    df = df.sort_values(by = ['date', 'time']).reset_index(drop = True)
+    xval = df.index
 
-    fig = plt.figure()
+    n = len(df.index)
+    if n <= 12:
+        hm = [x[:2] + ':' + x[2:4] for x in df['time']]
+    elif n <= 60:
+        hm = [x[:2] + ':' + x[2:4] if x[3] in '05' else '' for x in df['time']]
+    elif n <= 120:
+        hm = [x[:2] + ':' + x[2:4] if x[3] == '0' else '' for x in df['time']]
+    elif n <= 360:
+        hm = [x[:2] + ':' + x[2:4] if x[2:4] == '30' else '' for x in df['time']]
+    elif n <= 720:
+        hm = [x[:2] + ':' + x[2:4] if x[2:4] == '00' else '' for x in df['time']]
+    else:
+        hm = [x[:2] + ':' + x[2:4] if (x[2:4] == '00' and int(x[1]) % 2 == 0) else '' for x in df['time']]
+        
+    fig = plt.figure(figsize = (16, 9))
     ax1 = fig.add_subplot(111)
-    ln1 = ax1.plot(hm, df['temp[*C]'], 'C0',label = 'temp[*C]')
+    ln1 = ax1.plot(xval, [round(float(x), 1) for x in df['temp[*C]']], 'C0',label = 'Temperature [*C]')
 
     ax2 = ax1.twinx()
-    ln2 = ax2.plot(hm, df['humid[%]'], 'C1', label = 'humid[%]')
+    ln2 = ax2.plot(xval, [int(x) for x in df['activity']], 'C1', label = 'TaroImo Activity [/minute]')
 
     h1, l1 = ax1.get_legend_handles_labels()
     h2, l2 = ax2.get_legend_handles_labels()
     ax1.legend(h1 + h2, l1 + l2, loc = 'lower right')
 
-    ax1.set_xlabel('time')
-    ax1.set_ylabel('temp[*C]')
-    ax1.grid(True)
-    ax2.set_ylabel('humid[%]')
+    ax1.set_xlabel('Time')
+    ax1.set_ylabel('Temperature [*C]')
+    ax2.set_ylabel('TaroImo Activity [/minute]')
 
-    plt.savefig('hoge.png')
+    ax1.set_title('TaroImo Activity and Temperature')
+    ax1.set_xticks(df.index)
+    ax1.set_xticklabels(hm, rotation = 40) 
+    plt.savefig(LOGDIR + 'Temperature.png')
+    plt.close()
+    
+    fig = plt.figure(figsize = (16, 9))
+    ax1 = fig.add_subplot(111)
+    ln1 = ax1.plot(xval, [round(float(x), 1) for x in df['humid[%]']], 'C0', label = 'Humidity [%]')
+
+    ax2 = ax1.twinx()
+    ln2 = ax2.plot(xval, [int(x) for x in df['activity']], 'C1',label = 'TaroImo Activity [/minute]')
+
+    h1, l1 = ax1.get_legend_handles_labels()
+    h2, l2 = ax2.get_legend_handles_labels()
+    ax1.legend(h1 + h2, l1 + l2, loc = 'lower right')
+
+    ax1.set_xlabel('Time')
+    ax1.set_ylabel('Humidity [%]')
+    ax2.set_ylabel('TaroImo Activity [/minute]')
+
+    ax1.set_title('TaroImo Activity and Humidity')
+    ax1.set_xticks(df.index)
+    ax1.set_xticklabels(hm, rotation = 40) 
+    plt.savefig(LOGDIR + 'Humidity.png')
+    plt.close()
 
     
+def getLastNImages(addChart, addImage, n):
+
+    global MEDIADIR
+    global LOGDIR
+    time2fname = OrderedDict()
+
+    for f in glob(MEDIADIR + '*jpg'):
+        timeStamp = datetime.fromtimestamp(os.path.getmtime(f))
+        time2fname[timeStamp] = f
+
+    files = []
+    if addChart:
+        for fname in ('Temperature', 'Humidity'):
+            if os.path.exists(LOGDIR + fname + '.png'):
+                files.append(LOGDIR + fname + '.png')
+
+    if addImage:
+        for timeStamp, f in sorted(time2fname.items(), reverse = True):
+            files.append(f)
+            if n <= len(files):
+                break
+
+    return files
+
+
+def sendMail(sbj, body):
+
+    try:
+        os.system('python3 mail.py \"yahoo\" \"hasimoto.kotaro@gmail.com\" \"' + sbj + '\" \"' + body + '\"')
+    except:
+        pass
+
 
 def watch(signum, frame):
 
@@ -89,6 +168,7 @@ def watch(signum, frame):
     global currentIndex
     global vcmd
     global previousDateTime
+    global activity
 
     currentDateTime = datetime.now()
     day, tm = currentDateTime.strftime('%Y%m%d-%H%M%S').split('-')
@@ -97,32 +177,140 @@ def watch(signum, frame):
     series[currentIndex][['humid[%]', 'temp[*C]']] = [round(x, 2) if x else 0 for x in Adafruit_DHT.read_retry(DHT_SENSOR, DHT_PIN)]
     series[currentIndex][['CPU[*C]', 'CPU[v]', 'CPU[MHz]']] = [vcmd.measure_temp(), vcmd.measure_volts('core'), round(vcmd.measure_clock('arm') / 1000000)]
     series[currentIndex][['CPU[%]', 'memory[%]', 'rootfs[%]', 'usb[%]']] = [psutil.cpu_percent(interval = 1), psutil.virtual_memory().percent, psutil.disk_usage('/').percent, psutil.disk_usage('/home/pi/usb').percent]
-    series[currentIndex]['activity'], oldestJPG = countMotion(previousDateTime, currentDateTime)
+    series[currentIndex]['activity'], oldestJPG, recentFiles = countMotion(previousDateTime, currentDateTime)
     
-    if 90 < series[currentIndex]['usb[%]'] and oldestJPG:
-        os.remove(oldestJPG)
+    if 80 < series[currentIndex]['usb[%]'] and oldestJPG:
+        if os.path.exists(oldestJPG):
+            os.remove(oldestJPG)
+            if oldestJPG in recentFiles:
+                del recentFiles[recentFiles.index(oldestJPG)]
         print(oldestJPG, 'deleted due to free space shortage.')
-        
+
+    '''
     if 95 < series[currentIndex]['usb[%]']:
         fname = min(glob(LOGDIR + '20*.csv'))
         os.remove(fname)
         print(fname, 'deleted due to free space shortage.')
+    '''
 
-    df = pd.DataFrame([y for y in \
-                       [x for x in series if not pd.isnull(x['date'])] \
-                       if y['date'] == day]) \
-           .sort_values(by = 'time', ascending = False)
+    activity += series[currentIndex]['activity']    
+    if 0 < series[currentIndex]['activity']:
 
-    drawChart(df)
-    df.to_csv(LOGDIR + day + '.csv', encoding = 'utf-8', index = False)
-    print(day + '.csv dumped with', len(df), 'records (' + tm[:2] + ':' + tm[2:4] + ':' + tm[4:] + ')')
-    print(series[currentIndex])
+        msg = series[currentIndex]['time'][:2] + ':' + series[currentIndex]['time'][2:4] + ' '
+        n = series[currentIndex]['activity']
+        if n < 5:            
+            msg += 'たろいもさんが起きました'
+        elif n < 10:
+            msg += 'たろいもさんがうろうろしてます'
+        elif n < 20:
+            msg += 'たろいもさんが走り回ってます'
+        else:
+            msg += 'たろいもさんが暴れてます'
 
+        msg += ":" + str(n) + ' activity/分, '
+        msg += '温度:' + str(series[currentIndex]['temp[*C]']) + '℃, '
+        msg += '湿度:' + str(series[currentIndex]['humid[%]']) + '%, '
+        
+        client = WebClient(token = os.environ["SLACK_API_TOKEN"])        
+        try:
+            response = client.chat_postMessage(
+                channel = 'C018J2HN0UB',
+                text = msg
+            )
+
+            for fname in getLastNImages(False, True, 5):
+                if fname in recentFiles:
+                    response = client.files_upload(
+                        channels = 'C018J2HN0UB', 
+                        file = fname,
+                    ) 
+           
+        except:
+            print(response)
+            sendMail(msg, str(response))
+            pass
+        
+    if currentIndex % 10 == 0:
+
+        drawChart(pd.DataFrame([y for y in \
+                                [x for x in series if not pd.isnull(x['date'])]]))
+
+        df = pd.DataFrame([y for y in \
+                           [x for x in series if not pd.isnull(x['date'])] \
+                           if y['date'] == day]) \
+               .sort_values(by = ['date', 'time'], ascending = False).reset_index(drop = True)
+
+        df.to_csv(LOGDIR + day + '.csv', encoding = 'utf-8', index = False)
+        print(day + '.csv dumped with', len(df), 'records (' + tm[:2] + ':' + tm[2:4] + ':' + tm[4:] + ')')
+        
+        msg = currentDateTime.strftime('%H:%M') + ' 最近の10分間:' + str(activity) + ' activity, '
+        msg += '温度:' + str(series[currentIndex]['temp[*C]']) + '℃, '
+        msg += '湿度:' + str(series[currentIndex]['humid[%]']) + '%, '
+        msg += 'CPU温度,使用率:' + str(series[currentIndex]['CPU[*C]']) + '℃,' + str(series[currentIndex]['CPU[%]']) + '%, '
+        msg += 'メモリ使用率:' + str(series[currentIndex]['memory[%]']) + '%, '
+        msg += 'SD,USB使用率:' + str(series[currentIndex]['rootfs[%]']) + '%, ' + str(series[currentIndex]['usb[%]']) + '%'
+
+        activity = 0        
+        client = WebClient(token = os.environ["SLACK_API_TOKEN"])
+        try:
+            response = client.chat_postMessage(
+                channel = 'C018J2HN0UB',
+                text = msg
+            )
+            for fname in getLastNImages(True, False, 0):
+                response = client.files_upload(
+                    channels = 'C018J2HN0UB', 
+                    file = fname,
+                )
+            
+        except:
+            print(response)
+            sendMail(msg, str(response))
+            pass
+            
+
+    '''
+    if currentIndex % 10 == 0 or 0 < series[currentIndex]['activity']:
+                
+        sbj = ''
+        for c in ['activity', 'temp[*C]', 'humid[%]', 'CPU[*C]', 'CPU[%]', 'memory[%]', 'rootfs[%]', 'usb[%]']:
+            sbj += c + ':' + str(series[currentIndex][c]) + ', '
+
+        body = ' '.join(df.columns.tolist())
+        for i in range(10 if 10 < len(df.index) else len(df.index)):
+            body += '\n'
+            for c in df.columns[1:]:
+                body += c + ':' + str(df.loc[i, c]) + ', '
+
+        try:
+            os.system('python3 mail.py \"yahoo\" \"hasimoto.kotaro@gmail.com\" \"' + sbj + '\" \"' + body + '\"')
+        except:
+            pass
+    '''
+        
     currentIndex = (currentIndex + 1) % len(series)
     previousDateTime = currentDateTime
 
-
+    
 if __name__ == '__main__':
+
+    day = datetime.now().strftime('%Y%m%d')
+    if os.path.exists(LOGDIR + day + '.csv'):
+        
+        df = pd.read_csv(LOGDIR + day + '.csv', encoding = 'utf-8', dtype = object).sort_values(by = ['date', 'time']).reset_index(drop = True)
+        for i, v in df.iterrows():
+            series[i][col] = v[col].tolist()
+        currentIndex = len(df.index) % len(series)
+
+        '''
+        df = pd.DataFrame([y for y in \
+                           [x for x in series if not pd.isnull(x['date'])] \
+                           if y['date'] == day]) \
+               .sort_values(by = ['date', 'time'], ascending = False).reset_index(drop = True)
+
+        df.to_csv(day + '.csv', encoding = 'utf-8', index = False)
+        exit(1)
+        '''
 
     signal.signal(signal.SIGALRM, watch)
     signal.setitimer(signal.ITIMER_REAL, INTERVAL, INTERVAL)

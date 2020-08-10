@@ -43,9 +43,9 @@ CAM_STOPS = [(90, 10),
 
 # Image Settings
 # --------------
-imageNamePrefix = 'cam1-'  # default= 'cam1-' for all image file names. Eg garage-
-imageWidth = 1280          # default= 1024 Full Size Image Width in px
-imageHeight = 720          # default= 768  Full Size Image Height in px
+imageNamePrefix = 'taro-'  # default= 'cam1-' for all image file names. Eg garage-
+imageWidth = 1024          # default= 1024 Full Size Image Width in px
+imageHeight = 768          # default= 768  Full Size Image Height in px
 imageFormat = ".jpg"       # default= ".jpg"  image Formats .jpeg .png .gif .bmp
 imageJpegQuality = 95      # default= 95 jpg Encoder Quality Values 1(low)-100(high min compression) 0=85
 imageRotation = 0          # Default= 0  Rotate image. Valid values: 0, 90, 180, 270
@@ -76,7 +76,7 @@ nightTwilightModeOn = True  # default= True Outside Lighting  False= Inside with
 nightTwilightThreshold = 90 # default= 90 dayPixAve where twilight starts (framerate_range shutter)
 nightDarkThreshold = 50     # default= 50 dayPixAve where camera variable shutter long exposure starts
 nightBlackThreshold = 4     # default= 4  dayPixAve where almost no light so Max settings used
-nightSleepSec = 20          # default= 30 Sec - Time period to allow camera to calculate low light AWB
+nightSleepSec = 30          # default= 30 Sec - Time period to allow camera to calculate low light AWB
 nightMaxShutSec = 5.9       # default= 5.9 Sec Highest V1 Cam shutter for long exposures V2=10 Sec.
 nightMaxISO  = 800          # default= 800 Night ISO setting for Long Exposure below nightThreshold
 nightDarkAdjust = 4.7       # default= 4.7 Factor to fine tune nightDarkThreshold brightness (lower is brighter)
@@ -87,8 +87,10 @@ motionTrackOn = True        # default= True True=Turns Motion Detect On, False=O
 motionTrackQuickPic = True  # default= False True= save a frame image instead of switching out of opencv
 motionTrackInfo = True      # default= False Hide detailed track progress logging messages
 motionTrackTimeOut = 0.3    # default= 0.3 seconds Resets Track if no movement tracked
-motionTrackTrigLen = 75     # default= 75 px Length of motion track to Trigger motionFound
-motionTrackMinArea = 100    # default= 100 sq px  Minimum Area required to start tracking
+#motionTrackTrigLen = 75     # default= 75 px Length of motion track to Trigger motionFound
+#motionTrackMinArea = 100    # default= 100 sq px  Minimum Area required to start tracking
+motionTrackTrigLen = 10     # default= 75 px Length of motion track to Trigger motionFound
+motionTrackMinArea = 10     # default= 100 sq px  Minimum Area required to start tracking
 motionTrackFrameRate = 20   # default= 20 fps  PiVideoStream setting.  Single core RPI suggest 15 fps
 motionTrackQPBigger = 3.0   # default= 3.0 multiply size of QuickPic saved image from default 640x480
 
