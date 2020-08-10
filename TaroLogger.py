@@ -75,7 +75,7 @@ def drawChart(df):
     elif n <= 120:
         hm = [x[:2] + ':' + x[2:4] if x[3] == '0' else '' for x in df['time']]
     elif n <= 360:
-        hm = [x[:2] + ':' + x[2:4] if x[2:4] == '30' else '' for x in df['time']]
+        hm = [x[:2] + ':' + x[2:4] if x[2:4] in ('00', '30') else '' for x in df['time']]
     elif n <= 720:
         hm = [x[:2] + ':' + x[2:4] if x[2:4] == '00' else '' for x in df['time']]
     else:
