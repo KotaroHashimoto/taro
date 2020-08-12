@@ -91,7 +91,7 @@ def drawChart(df):
     if 5 < len(yval):
         for i in range(5, len(yval)):
             average = np.average(yval[i - 5: i])
-            if yval[i] < 0.8 * average or 1.2 < average < yval[i]:
+            if yval[i] < 0.5 * average or 1.5 * average < yval[i]:
                 yval[i] = average
                 
     ln1 = ax1.plot(xval, yval, 'C0',label = 'Temperature [*C]')
@@ -119,7 +119,7 @@ def drawChart(df):
     if 5 < len(yval):
         for i in range(5, len(yval)):
             average = np.average(yval[i - 5: i])
-            if yval[i] < 0.8 * average or 1.2 < average < yval[i]:
+            if yval[i] < 0.5 * average or 1.5 * average < yval[i]:
                 yval[i] = average
                 
     ln1 = ax1.plot(xval, yval, 'C0',label = 'Temperature [*C]')
@@ -129,7 +129,7 @@ def drawChart(df):
     if 5 < len(yval):
         for i in range(5, len(yval)):
             average = np.average(yval[i - 5: i])
-            if yval[i] < 0.8 * average or 1.2 < average < yval[i]:
+            if yval[i] < 0.5 * average or 1.5 * average < yval[i]:
                 yval[i] = average
                 
     ln2 = ax2.plot(xval, yval, 'C1', label = 'Humidity [%]')
