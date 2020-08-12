@@ -87,7 +87,9 @@ def drawChart(df):
         
     fig = plt.figure(figsize = (16, 9))
     ax1 = fig.add_subplot(111)
-    ln1 = ax1.plot(xval, [float(x) for x in df['temp[*C]']], 'C0',label = 'Temperature [*C]')
+    yval = [float(x) for x in df['temp[*C]']]
+    average = np.average([y for y in yval if 0 < y])
+    ln1 = ax1.plot(xval, [average if y == 0 else y for y in yval], 'C0',label = 'Temperature [*C]')
 
     ax2 = ax1.twinx()
     ln2 = ax2.plot(xval, [int(x) for x in df['activity']], 'C1', label = 'TaroImo Activity [/minute]')
@@ -108,10 +110,14 @@ def drawChart(df):
     
     fig = plt.figure(figsize = (16, 9))
     ax1 = fig.add_subplot(111)
-    ln1 = ax1.plot(xval, [float(x) for x in df['temp[*C]']], 'C0',label = 'Temperature [*C]')
+    yval = [float(x) for x in df['temp[*C]']]
+    average = np.average([y for y in yval if 0 < y])
+    ln1 = ax1.plot(xval, [average if y == 0 else y for y in yval], 'C0',label = 'Temperature [*C]')
     
     ax2 = ax1.twinx()
-    ln2 = ax2.plot(xval, [float(x) for x in df['humid[%]']], 'C1', label = 'Humidity [%]')
+    yval = [float(x) for x in df['humid[%]']]
+    average = np.average([y for y in yval if 0 < y])
+    ln2 = ax2.plot(xval, [average if y == 0 else y for y in yval], 'C1', label = 'Humidity [%]')
 
     h1, l1 = ax1.get_legend_handles_labels()
     h2, l2 = ax2.get_legend_handles_labels()
@@ -207,11 +213,11 @@ def watch(signum, frame):
             lastMoveIndex[li] = (lastMoveIndex[li] + 1) % len(lastMoveIndex)
         lastMoves[lastMoveIndex[-1]] = (msg, str(n))
         
-        if n < 5:            
+        if n < 10:
             msg += 'たろいもさんが起きました'
-        elif n < 10:
-            msg += 'たろいもさんがうろうろしてます'
         elif n < 20:
+            msg += 'たろいもさんがうろうろしてます'
+        elif n < 30:
             msg += 'たろいもさんが走り回ってます'
         else:
             msg += 'たろいもさんが暴れてます'
@@ -235,11 +241,11 @@ def watch(signum, frame):
                     ) 
 
         except urllib.error.URLError as e:
-            print(response, '\n', e)
+            print(response, '\n', e, '\n', currentDateTime)
             sendMail(msg, str(response) + str(e))
             pass            
         except:
-            print(response)
+            print(response, currentDateTime)
             sendMail(msg, str(response))
             pass
         
@@ -284,11 +290,11 @@ def watch(signum, frame):
                 )
             
         except urllib.error.URLError as e:
-            print(response, '\n', e)
+            print(response, '\n', e, currentDateTime)
             sendMail(msg, str(response) + str(e))
             pass            
         except:
-            print(response)
+            print(response, currentDateTime)
             sendMail(msg, str(response))
             pass
             
@@ -347,6 +353,8 @@ if __name__ == '__main__':
         
     signal.signal(signal.SIGALRM, watch)
     signal.setitimer(signal.ITIMER_REAL, INTERVAL, INTERVAL)
+
+    sendMail('TaroLogger started', str(currentIndex))
     
     while True:
         time.sleep(86400)
