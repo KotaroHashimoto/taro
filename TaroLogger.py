@@ -88,8 +88,13 @@ def drawChart(df):
     fig = plt.figure(figsize = (16, 9))
     ax1 = fig.add_subplot(111)
     yval = [float(x) for x in df['temp[*C]']]
-    average = np.average([y for y in yval if 0 < y])
-    ln1 = ax1.plot(xval, [average if y == 0 else y for y in yval], 'C0',label = 'Temperature [*C]')
+    if 5 < len(yval):
+        for i in range(5, len(yval)):
+            average = np.average(yval[i - 5: i])
+            if yval[i] < 0.8 * average or 1.2 < average < yval[i]:
+                yval[i] = average
+                
+    ln1 = ax1.plot(xval, yval, 'C0',label = 'Temperature [*C]')
 
     ax2 = ax1.twinx()
     ln2 = ax2.plot(xval, [int(x) for x in df['activity']], 'C1', label = 'TaroImo Activity [/minute]')
@@ -111,13 +116,23 @@ def drawChart(df):
     fig = plt.figure(figsize = (16, 9))
     ax1 = fig.add_subplot(111)
     yval = [float(x) for x in df['temp[*C]']]
-    average = np.average([y for y in yval if 0 < y])
-    ln1 = ax1.plot(xval, [average if y == 0 else y for y in yval], 'C0',label = 'Temperature [*C]')
+    if 5 < len(yval):
+        for i in range(5, len(yval)):
+            average = np.average(yval[i - 5: i])
+            if yval[i] < 0.8 * average or 1.2 < average < yval[i]:
+                yval[i] = average
+                
+    ln1 = ax1.plot(xval, yval, 'C0',label = 'Temperature [*C]')
     
     ax2 = ax1.twinx()
     yval = [float(x) for x in df['humid[%]']]
-    average = np.average([y for y in yval if 0 < y])
-    ln2 = ax2.plot(xval, [average if y == 0 else y for y in yval], 'C1', label = 'Humidity [%]')
+    if 5 < len(yval):
+        for i in range(5, len(yval)):
+            average = np.average(yval[i - 5: i])
+            if yval[i] < 0.8 * average or 1.2 < average < yval[i]:
+                yval[i] = average
+                
+    ln2 = ax2.plot(xval, yval, 'C1', label = 'Humidity [%]')
 
     h1, l1 = ax1.get_legend_handles_labels()
     h2, l2 = ax2.get_legend_handles_labels()
